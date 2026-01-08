@@ -47,20 +47,20 @@ def get_batch(split): #generate small batch of data with input x and target y
     y = torch.stack([data[i+1:i+block_size+1] for i in ix]) #x offset by one
     return x, y
 xb, yb = get_batch('train')
-print('inputs:')
+"""print('inputs:')
 print(xb.shape)
 print(xb)
 print('targets:')
 print(yb.shape)
 print(yb)
 
-print('----')
+print('----')"""
 
-"""for b in range(batch_size): # batch dimension
+for b in range(batch_size): # batch dimension
     for t in range(block_size): # time dimension
         context = xb[b, :t+1]
         target = yb[b,t]
-        print(f"when input is {context.tolist()} the target: {target}")"""
+       # print(f"when input is {context.tolist()} the target: {target}")
        
 import torch
 import torch.nn as nn
@@ -107,8 +107,22 @@ class BigramLanguageModel(nn.Module):
 
 m = BigramLanguageModel(vocab_size)
 logits, loss = m(xb, yb)
-print(logits.shape)
+"""print(logits.shape)
 print(loss)
 
-print(decode(m.generate(idx = torch.zeros((1, 1), dtype=torch.long), max_new_tokens=100)[0].tolist()))
+print(decode(m.generate(idx = torch.zeros((1, 1), dtype=torch.long), max_new_tokens=100)[0].tolist()))"""
 
+optimizer = torch.optim.AdamW(m.parameters(), lr=1e-3) #create AdamW optimizer lr=learning rate
+batch_size = 32
+for steps in range(10000): # increase number of steps for good results...
+
+    # sample a batch of data
+    xb, yb = get_batch('train')
+
+    # evaluate the loss
+    logits, loss = m(xb, yb)
+    optimizer.zero_grad(set_to_none=True)
+    loss.backward()
+    optimizer.step()
+
+print(loss.item())
