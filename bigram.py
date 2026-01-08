@@ -41,6 +41,21 @@ def get_batch(split): #generate small batch of data with input x and target y
     x, y = x.to(device), y.to(device) #move data to GPU after its loaded
     return x, y
 
+@torch.no_grad() #tell pytorch to not call .backward on estimate_loss()
+def estimate_loss(): #averages loss over multiple batches
+    out = {}
+    model.eval()
+    for split in ['train', 'val']:
+        losses = torch.zeros(eval_iterations)
+        for k in range(eval_iterations): #iterate eval_iterations times 
+            X, Y = get_batch(split)   #get loss
+            logits, loss = model(X, Y)
+            losses[k] = loss.item()
+        out[split] = losses.mean() #get average loss from both splits
+    model.train()
+    return out
+
+
 
 class BigramLanguageModel(nn.Module):
 
@@ -82,9 +97,12 @@ class BigramLanguageModel(nn.Module):
 
 model = BigramLanguageModel(vocab_size)
 m = model.to(device) #move model parameters to GPU
+
 optimizer = torch.optim.AdamW(m.parameters(), lr=1e-3) #create AdamW optimizer lr=learning rate
 for iterations in range(max_iterations): # increase number of steps for good results...
-
+    if iterations % eval_interval == 0: 
+        losses = estimate_loss()
+        print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}") #report train validation loss
     # sample a batch of data
     xb, yb = get_batch('train')
 
