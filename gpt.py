@@ -1,3 +1,5 @@
+#taken from Andrej Karpathy on youtube (really good tutorial!) https://www.youtube.com/watch?v=kCc8FmEb1nY
+
 import torch
 
 
@@ -7,12 +9,12 @@ with open('input.txt', 'r', encoding='utf-8') as f: #open input.txt
     text = f.read()
 
 chars = sorted(list(set(text))) #get set of characters from dataset
-vocab = len(chars) #length of char set
+vocab_size = len(chars) #length of char set
 
 
 #map characters to integers and integers to characters
 stoi = {ch:i for i, ch in enumerate(chars)} #iterate over all characters and create lookup table characters to ints
-istoi = {i:ch for i, ch in enumerate(chars)} #lookup ints to characters
+itos = {i:ch for i, ch in enumerate(chars)} #lookup ints to characters
 encode = lambda s: [stoi[c] for c in s] #translate characters to ints individually
 decode = lambda l: ''.join([itos[i] for i in l]) #translate ints to characters individually
 
@@ -69,20 +71,44 @@ class BigramLanguageModel(nn.Module):
 
     def __init__(self, vocab_size):
         super().__init__()
-        # each token directly reads off the logits for the next token from a lookup table
+        # create a vocab_size x vocab_size token embedding table
         self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
 
     def forward(self, idx, targets=None):
 
         # idx and targets are both (B,T) tensor of integers
-        logits = self.token_embedding_table(idx) # (B,T,C)
-
+        logits = self.token_embedding_table(idx) #every integer in input refers to embedding table and
+        #plucks row from embedding table corresponding to index breaking down into Batch = 4, time = 8 and channels = vocab_size (B,T,C)
+        #logits are predictions
         if targets is None:
             loss = None
         else:
-            B, T, C = logits.shape
-            logits = logits.view(B*T, C)
+            B, T, C = logits.shape 
+            logits = logits.view(B*T, C) #change C to second dimension to work with Pytorch
             targets = targets.view(B*T)
-            loss = F.cross_entropy(logits, targets)
+            loss = F.cross_entropy(logits, targets) #measures quality of logits with respect to targets
 
         return logits, loss
+
+    def generate(self, idx, max_new_tokens): #generate function for model take (B+T) and make (B+T) + 1,2,3, etc. until max new †okens
+        # idx is (B, T) array of indices in the current context
+        for _ in range(max_new_tokens):
+            # get the predictions
+            logits, loss = self(idx)
+            # focus only on the last time step
+            logits = logits[:, -1, :] # becomes (B, C)
+            # apply softmax to get probabilities
+            probs = F.softmax(logits, dim=-1) # (B, C)
+            # sample from the distribution
+            idx_next = torch.multinomial(probs, num_samples=1) # (B, 1)
+            # append sampled index to the running sequence
+            idx = torch.cat((idx, idx_next), dim=1) # (B, T+1)
+        return idx
+
+m = BigramLanguageModel(vocab_size)
+logits, loss = m(xb, yb)
+print(logits.shape)
+print(loss)
+
+print(decode(m.generate(idx = torch.zeros((1, 1), dtype=torch.long), max_new_tokens=100)[0].tolist()))
+
