@@ -112,9 +112,11 @@ class Block(nn.Module):
         super().__init__()
         self.sa_head = multiheadAttention(n_heads, n_embed//n_heads) #4 heads, each head size is n_embed/4
         self.ffwd = Feedforward(n_embed) 
+        self.ln1 = nn.LayerNorm(n_embed) #layer norm before self-attention
+        self.ln2 = nn.LayerNorm(n_embed)
     def forward(self, x):
-        x = x +self.sa_head(x) #use residual connection 
-        x = x+ self.ffwd(x)
+        x = x +self.sa_head(self.ln1(x)) #use residual connection 
+        x = x+ self.ffwd(self.ln2(x))
         return x
 
 class BigramLanguageModel(nn.Module):
