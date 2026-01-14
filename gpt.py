@@ -13,6 +13,9 @@ learning_rate = 1e-3
 device = 'cuda' if torch.cuda.is_available() else 'cpu' #if you have a GPU use cuda instead of CPU
 eval_iterations = 200
 n_embed = 32
+n_heads = 4
+n_layers = 4
+dropout = 0.0
 #---------------------------------------------------------
 torch.manual_seed(1337)
 
@@ -68,6 +71,7 @@ class Head(nn.Module):
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
         self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size))) #lower triangular matrix to mask future tokens
+        self.dropout = nn.Dropout(dropout)
     def forward(self, x):
         B,T,C = x.shape
 
@@ -79,6 +83,7 @@ class Head(nn.Module):
         wei = q @ k.transpose(-2, -1) * C ** -0.5 # (B,T, head_size) @ (B, head_size, T) ----> (B,T,T) C is scaling factor to prevent large dot products
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf')) #masking
         wei = F.softmax(wei, dim=-1) #normalize
+        wei = self.dropout(wei)
         v = self.value(x) #(B,T, head_size)
         out = wei @ v #aggregation through matrix multiplication
         return out
@@ -87,6 +92,7 @@ class multiheadAttention(nn.Module):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)]) #create multiple heads
         self.proj = nn.Linear(n_embed, n_embed) #final projection layer
+        self.dropout = nn.Dropout(dropout)
     def forward(self, x):
         out = torch.cat([h(x) for h in self.heads], dim=-1) #concatenate outputs of all heads
         out = self.proj(out) #final projection
@@ -102,6 +108,7 @@ class Feedforward(nn.Module):
             nn.Linear(n_embed, 4 * n_embed), #expand embedding size by 4
             nn.ReLU(),
             nn.Linear(4 * n_embed, n_embed), #project back to n_embed
+            nn.Dropout(dropout)
         )
     def forward(self, x):
         return self.net(x)
@@ -125,10 +132,7 @@ class BigramLanguageModel(nn.Module):
         super().__init__()
         # create a vocab_size x vocab_size token embedding table
         self.token_embedding_table = nn.Embedding(vocab_size, n_embed)
-        self.blocks = nn.Sequential(
-            Block(n_embed, 4),
-            Block(n_embed, 4),
-            Block(n_embed, 4),
+        self.blocks = nn.Sequential(*[Block(n_embed, n_heads=n_heads) for _ in range(n_layers)]
         )
         self.lm_head = nn.Linear(n_embed, vocab_size)
         self.sa_head = multiheadAttention(4, n_embed//4) #4 heads, each head size is n_embed/4
