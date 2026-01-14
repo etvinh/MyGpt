@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-#hyperparameter
+#hyperparameters
 batch_size = 4 # number of independent sequences proccessed in parallel
 block_size = 8 #max context length for predictions
 max_iterations = 3000
@@ -10,6 +10,7 @@ eval_interval = 300
 learning_rate = 1e-2
 device = 'cuda' if torch.cuda.is_available() else 'cpu' #if you have a GPU use cuda instead of CPU
 eval_iterations = 200
+n_embed = 32
 #---------------------------------------------------------
 torch.manual_seed(1337)
 
@@ -59,17 +60,20 @@ def estimate_loss(): #averages loss over multiple batches
 
 class BigramLanguageModel(nn.Module):
 
-    def __init__(self, vocab_size):
+    def __init__(self):
         super().__init__()
         # create a vocab_size x vocab_size token embedding table
-        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
-
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embed)
+        self.ml_head = nn.Linear(n_embed, vocab_size)
+        self.position_embedding_table = nn.Embedding(block_size, n_embed) #each position from 0 to block_size - 1 gets an embed
     def forward(self, idx, targets=None):
 
         # idx and targets are both (B,T) tensor of integers
-        logits = self.token_embedding_table(idx) #every integer in input refers to embedding table and
-        #plucks row from embedding table corresponding to index breaking down into Batch = 4, time = 8 and channels = vocab_size (B,T,C)
+        token_embeddings = self.token_embedding_table(idx) #every integer in input refers to embedding table and
+        #plucks row from embedding table corresponding to index breaking down into Batch = 4, time = 8 and channels = embed (B,T,C)
         #logits are predictions
+        pos_embedding = self.position_embedding_table(torch.arange(T))
+        logits = self.lm_head(token_embeddings) #(B,T, vocab_size)
         if targets is None:
             loss = None
         else:
