@@ -16,6 +16,8 @@ n_embed = 96
 n_heads = 6
 n_layers = 4
 dropout = 0.1
+temp = 1.0
+top_k = 10
 #---------------------------------------------------------
 torch.manual_seed(1337)
 
@@ -160,14 +162,18 @@ class BigramLanguageModel(nn.Module):
 
         return logits, loss
 
-    def generate(self, idx, max_new_tokens): #generate function for model take (B+T) and make (B+T) + 1,2,3, etc. until max new †okens
+    def generate(self, idx, max_new_tokens, temp, top_k): #generate function for model take (B+T) and make (B+T) + 1,2,3, etc. until max new †okens
         # idx is (B, T) array of indices in the current context
         for _ in range(max_new_tokens):
             # get the predictions
             idx_cond = idx[:, -block_size:] #crop idx to last block_size tokens
             logits, loss = self(idx_cond)
             # focus only on the last time step
-            logits = logits[:, -1, :] # becomes (B, C)
+            logits = logits[:, -1, :] / temp# becomes (B, C)
+            if top_k is not None:
+                v, _ = torch.topk(logits, top_k)
+                logits[logits < v[:, [-1]]] = -float("inf")
+
             # apply softmax to get probabilities
             probs = F.softmax(logits, dim=-1) # (B, C)
             # sample from the distribution
@@ -197,5 +203,5 @@ for iterations in range(max_iterations): # increase number of steps for good res
     optimizer.step()
 
 context = torch.zeros((1, 1), dtype=torch.long, device=device) #create context on GPU
-print(decode(m.generate(idx = torch.zeros((1, 1), dtype=torch.long), max_new_tokens=500)[0].tolist()))
+print(decode(model.generate(context, 500, temp=0.8, top_k=40)[0].tolist()))
 
