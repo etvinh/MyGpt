@@ -4,25 +4,30 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 
-#hyperparameters
+#HYPERPARAMETERS---------------------------------------------------------
+
+# 
+# block_size = 256 #max context length for predictions
 batch_size = 16 # number of independent sequences proccessed in parallel
-block_size = 128 #max context length for predictions
+block_size = 256
 max_iterations = 3000
 eval_interval = 300
-learning_rate = 1e-3
+eval_iterations = 6000
+learning_rate = 3e-4
 device = 'mps' if torch.cuda.is_available() else 'cpu' #if you have a GPU use cuda instead of CPU
-eval_iterations = 100
-n_embed = 96
+n_embed = 192
 n_heads = 6
-n_layers = 4
+n_layers = 8
 dropout = 0.1
-temp = 1.0
-top_k = 10
-#---------------------------------------------------------
+temp = 0.4
+top_k = 30
 torch.manual_seed(1337)
 
+#---------------------------------------------------------
 
-with open('input.txt', 'r', encoding='utf-8') as f: #open input.txt
+
+
+with open('monty_formatted.txt', 'r', encoding='utf-8') as f: #open input.txt
     text = f.read()
 
 chars = sorted(list(set(text))) #get set of characters from dataset
@@ -39,7 +44,7 @@ n = int(0.9*len(data)) #use first 90% for train data and last 10% to evaulation 
 train_data = data[:n]
 val_data = data[n:]
 
-
+#---------------------------------------------------------
 
 def get_batch(split): #generate small batch of data with input x and target y
     data = train_data if split == 'train' else val_data #assign data to train or val
@@ -48,6 +53,7 @@ def get_batch(split): #generate small batch of data with input x and target y
     y = torch.stack([data[i+1:i+block_size+1] for i in ix]) #x offset by one
     x, y = x.to(device), y.to(device) #move data to GPU after its loaded
     return x, y
+#---------------------------------------------------------
 
 @torch.no_grad() #tell pytorch to not call .backward on estimate_loss()
 def estimate_loss(): #averages loss over multiple batches
@@ -62,6 +68,7 @@ def estimate_loss(): #averages loss over multiple batches
         out[split] = losses.mean() #get average loss from both splits
     model.train()
     return out
+#---------------------------------------------------------
 
 class Head(nn.Module):
 
@@ -89,6 +96,9 @@ class Head(nn.Module):
         v = self.value(x) #(B,T, head_size)
         out = wei @ v #aggregation through matrix multiplication
         return out
+
+#---------------------------------------------------------
+
 class multiheadAttention(nn.Module):
     def __init__(self, num_heads, head_size):
         super().__init__()
@@ -101,6 +111,7 @@ class multiheadAttention(nn.Module):
         return out
     
 
+#---------------------------------------------------------
 
 
 class Feedforward(nn.Module):
@@ -115,6 +126,7 @@ class Feedforward(nn.Module):
     def forward(self, x):
         return self.net(x)
     
+#---------------------------------------------------------
 
 class Block(nn.Module):
     def __init__(self, n_embed, n_heads):
@@ -128,7 +140,9 @@ class Block(nn.Module):
         x = x+ self.ffwd(self.ln2(x))
         return x
 
-class BigramLanguageModel(nn.Module):
+#---------------------------------------------------------
+
+class MyLanguageModel(nn.Module):
 
     def __init__(self):
         super().__init__()
@@ -182,10 +196,9 @@ class BigramLanguageModel(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1) # (B, T+1)
         return idx
 
-
-
-    
-model = BigramLanguageModel()
+#---------------------------------------------------------
+  
+model = MyLanguageModel()
 m = model.to(device) #move model parameters to GPU
 
 optimizer = torch.optim.AdamW(m.parameters(), lr=1e-3) #create AdamW optimizer lr=learning rate
@@ -201,6 +214,7 @@ for iterations in range(max_iterations): # increase number of steps for good res
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
     optimizer.step()
+#---------------------------------------------------------
 
 context = torch.zeros((1, 1), dtype=torch.long, device=device) #create context on GPU
 print(decode(model.generate(context, 500, temp=0.8, top_k=40)[0].tolist()))
