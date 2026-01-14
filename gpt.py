@@ -86,8 +86,10 @@ class multiheadAttention(nn.Module):
     def __init__(self, num_heads, head_size):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)]) #create multiple heads
+        self.proj = nn.Linear(n_embed, n_embed) #final projection layer
     def forward(self, x):
         out = torch.cat([h(x) for h in self.heads], dim=-1) #concatenate outputs of all heads
+        out = self.proj(out) #final projection
         return out
     
 
@@ -106,13 +108,13 @@ class Feedforward(nn.Module):
     
 
 class Block(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.sa_head = multiheadAttention(4, n_embed//4) #4 heads, each head size is n_embed/4
+    def __init__(self, n_embed, n_heads):
+        super().__init__()
+        self.sa_head = multiheadAttention(n_heads, n_embed//n_heads) #4 heads, each head size is n_embed/4
         self.ffwd = Feedforward(n_embed) 
     def forward(self, x):
-        x = self.sa_head(x)
-        x = self.ffwd(x)
+        x = x +self.sa_head(x) #use residual connection 
+        x = x+ self.ffwd(x)
         return x
 
 class BigramLanguageModel(nn.Module):
@@ -121,6 +123,11 @@ class BigramLanguageModel(nn.Module):
         super().__init__()
         # create a vocab_size x vocab_size token embedding table
         self.token_embedding_table = nn.Embedding(vocab_size, n_embed)
+        self.blocks = nn.Sequential(
+            Block(n_embed, 4),
+            Block(n_embed, 4),
+            Block(n_embed, 4),
+        )
         self.lm_head = nn.Linear(n_embed, vocab_size)
         self.sa_head = multiheadAttention(4, n_embed//4) #4 heads, each head size is n_embed/4
         self.ffwd = Feedforward(n_embed) 
