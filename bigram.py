@@ -67,13 +67,14 @@ class BigramLanguageModel(nn.Module):
         self.ml_head = nn.Linear(n_embed, vocab_size)
         self.position_embedding_table = nn.Embedding(block_size, n_embed) #each position from 0 to block_size - 1 gets an embed
     def forward(self, idx, targets=None):
-
+        B, T = idx.shape
         # idx and targets are both (B,T) tensor of integers
         token_embeddings = self.token_embedding_table(idx) #every integer in input refers to embedding table and
         #plucks row from embedding table corresponding to index breaking down into Batch = 4, time = 8 and channels = embed (B,T,C)
         #logits are predictions
-        pos_embedding = self.position_embedding_table(torch.arange(T))
-        logits = self.lm_head(token_embeddings) #(B,T, vocab_size)
+        pos_embedding = self.position_embedding_table(torch.arange(T), device =device) #creates (T, C) tensor of position embeddings
+        x = token_embeddings + pos_embedding #add position embeddings to token embeddings (B,T,C)
+        logits = self.lm_head(x) #(B,T, vocab_size)
         if targets is None:
             loss = None
         else:

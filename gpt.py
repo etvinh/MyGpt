@@ -1,6 +1,9 @@
 #taken from Andrej Karpathy on youtube (really good tutorial!) https://www.youtube.com/watch?v=kCc8FmEb1nY
-
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+
 
 #toy example
 torch.manual_seed(1337)
@@ -27,3 +30,28 @@ wei = F.softmax(wei, dim=-1) #normalize
 xbow3 = wei @ x #aggregation through matrix multiplication
 torch.allclose(xbow, xbow3)
 
+#final self-attention implementation
+
+torch.manual_seed(1337)
+B,T,C = 4,8,32
+x = torch.randn(B,T,C)
+
+
+#single head to perform self-attention
+head_size = 16
+key = nn.Linear(C, head_size, bias=False)
+query = nn.Linear(C, head_size, bias=False)
+value = nn.Linear(C, head_size, bias=False)
+k = key(x)   #(B,T, head_size)
+q = query(x) #(B,T, head_size)
+#all queries dot product with all keys
+wei = q @ k.transpose(-2, -1) # (B,T, head_size) @ (B, head_size, T) ----> (B,T,T)
+
+
+tril = torch.tril(torch.ones(T, T))
+wei = torch.zeros((T,T)) #weights begin with 0, wei tells us how much of each token do we want to aggregate
+wei = wei.masked_fill(tril == 0, float('-inf')) #masking
+wei = F.softmax(wei, dim=-1) #normalize
+v = value(x) #(B,T, head_size)
+out = wei @ v #aggregation through matrix multiplication
+print(out.shape)
